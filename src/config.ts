@@ -11,7 +11,7 @@ interface Config {
 }
 
 const DEFAULTS: Config = {
-  agent:   { name: "quarta-feira", model: "claude-opus-4-7", effort: "high" },
+  agent:   { name: "quarta-feira", model: "claude-opus-4-7", effort: "low" },
   user:    { name: "Renzo" },
   gateway: { port: 18790 },
   ollama:  { url: "http://localhost:11434", embedModel: "nomic-embed-text" },

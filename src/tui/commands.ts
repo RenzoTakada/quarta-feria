@@ -22,6 +22,7 @@ const RISKY_PATTERNS = [
 const HELP = `Comandos disponíveis:
 
   /help                 esta ajuda
+  /effort low|medium|high   nível de raciocínio (afeta custo e qualidade)
   /memory               lista todas as memórias
   /memory search <q>    busca memórias por texto
   /memory delete <key>  remove memória por chave
@@ -32,7 +33,12 @@ const HELP = `Comandos disponíveis:
   /tools                ferramentas disponíveis
   /safety               regras de segurança bash`;
 
-export async function handleCommand(input: string): Promise<CommandResult> {
+export type WsAction = (payload: object) => void;
+
+export async function handleCommand(
+  input: string,
+  wsAction?: WsAction
+): Promise<CommandResult> {
   if (!input.startsWith("/")) return { type: "not_a_command" };
 
   const [cmd, ...args] = input.slice(1).trim().split(/\s+/);
@@ -41,6 +47,16 @@ export async function handleCommand(input: string): Promise<CommandResult> {
   switch (cmd) {
     case "help":
       return { type: "output", text: HELP };
+
+    case "effort": {
+      const level = args[0] as "low" | "medium" | "high" | undefined;
+      if (!level || !["low", "medium", "high"].includes(level)) {
+        return { type: "output", text: "Uso: /effort low|medium|high\n\n  low    — resposta direta, pouco raciocínio, menor custo\n  medium — equilíbrio entre qualidade e custo\n  high   — raciocínio extenso, maior qualidade, maior custo" };
+      }
+      wsAction?.({ type: "set_effort", effort: level });
+      const labels = { low: "baixo (econômico)", medium: "médio (equilibrado)", high: "alto (máxima qualidade)" };
+      return { type: "output", text: `Raciocínio → ${labels[level]}\nVale para as próximas mensagens desta sessão.` };
+    }
 
     case "memory": {
       if (args[0] === "search" && args[1]) {

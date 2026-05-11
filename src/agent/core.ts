@@ -11,6 +11,10 @@ dotenv.config();
 const MODEL = config.agent.model;
 const MAX_TOKENS = 16000;
 
+// Mantém no máximo N mensagens no histórico (mais antigas são descartadas)
+// Isso evita que o contexto cresça sem limite entre turns
+const MAX_HISTORY_MESSAGES = 20;
+
 export type AgentEvents = {
   onThinking: (text: string) => void;
   onText: (text: string) => void;
@@ -28,17 +32,40 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
+// Remove blocos de thinking do histórico — são grandes e não precisam ser reenviados
+function stripThinkingBlocks(messages: Message[]): Message[] {
+  return messages.map((m) => {
+    if (m.role !== "assistant" || typeof m.content === "string") return m;
+    const filtered = (m.content as Anthropic.ContentBlock[]).filter(
+      (b) => b.type !== "thinking" && b.type !== "redacted_thinking"
+    );
+    return { ...m, content: filtered };
+  });
+}
+
+// Descarta as mensagens mais antigas quando o histórico cresce demais
+function trimHistory(messages: Message[]): Message[] {
+  if (messages.length <= MAX_HISTORY_MESSAGES) return messages;
+  // Remove os mais antigos, preservando pares user/assistant completos
+  const excess = messages.length - MAX_HISTORY_MESSAGES;
+  return messages.slice(excess);
+}
+
 export async function chat(
   userMessage: string,
   history: Message[],
   events: AgentEvents,
-  tracker: TokenTracker
+  tracker: TokenTracker,
+  effort: "low" | "medium" | "high" = config.agent.effort
 ): Promise<{ response: string; updatedHistory: Message[] }> {
-  const context = await buildContext();
+  const context = await buildContext(userMessage);
   const systemPrompt = PERSONALITY + context;
 
+  // Limpa e apara histórico antes de enviar
+  const cleanHistory = trimHistory(stripThinkingBlocks(history));
+
   const messages: Message[] = [
-    ...history,
+    ...cleanHistory,
     { role: "user", content: userMessage },
   ];
 
@@ -50,7 +77,7 @@ export async function chat(
       model: MODEL,
       max_tokens: MAX_TOKENS,
       thinking: { type: "adaptive" },
-      output_config: { effort: config.agent.effort },
+      output_config: { effort },
       system: systemPrompt,
       messages,
       tools: TOOL_DEFINITIONS,
@@ -70,7 +97,6 @@ export async function chat(
 
     const message = await stream.finalMessage();
 
-    // Captura usage + headers para o tracker
     const httpResponse = stream.response as Response | undefined;
     tracker.update(message.usage, httpResponse?.headers as unknown as Headers);
     events.onTokenUpdate(tracker.snapshot());

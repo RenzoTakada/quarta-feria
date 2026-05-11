@@ -3,6 +3,7 @@ import type { TokenSnapshot } from "../agent/tokens.js";
 // Cliente → Gateway
 export type ClientMessage =
   | { type: "chat"; content: string }
+  | { type: "set_effort"; effort: "low" | "medium" | "high" }
   | { type: "reset" }
   | { type: "ping" };
 

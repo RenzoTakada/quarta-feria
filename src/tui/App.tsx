@@ -160,7 +160,8 @@ export default function App() {
 
       // Intercepta comandos internos /
       if (content.startsWith("/")) {
-        const result = await handleCommand(content);
+        const wsAction = (payload: object) => ws.current?.send(JSON.stringify(payload));
+        const result = await handleCommand(content, wsAction);
         if (result.type === "output") {
           setMessages((prev) => [...prev,
             { id: ++msgId.current, role: "user", content },

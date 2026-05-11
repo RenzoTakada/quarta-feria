@@ -35,7 +35,8 @@ async function handleChat(ws: WebSocket, content: string): Promise<void> {
         onToolResult: (name, result) => send(ws, { type: "tool_result", name, result }),
         onTokenUpdate: (snapshot) => send(ws, { type: "token_update", snapshot }),
       },
-      session.tracker
+      session.tracker,
+      session.effort
     );
 
     session.history = updatedHistory;
@@ -60,6 +61,10 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
   switch (msg.type) {
     case "chat":
       handleChat(ws, msg.content);
+      break;
+    case "set_effort":
+      session.effort = msg.effort;
+      console.log(`[gateway] effort → ${msg.effort}`);
       break;
     case "reset":
       session.reset();
