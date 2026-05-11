@@ -1,4 +1,5 @@
 import { Pool, types } from "pg";
+import type { PoolClient } from "pg";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -9,6 +10,26 @@ types.setTypeParser(20, (val) => parseInt(val, 10));
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL ?? "postgresql://quarta:feria@localhost:5432/quarta_feria",
 });
+
+const EMBED_DIMS = 768; // nomic-embed-text
+
+async function migrateVectorDims(client: PoolClient): Promise<void> {
+  try {
+    // Verifica dimensão atual da coluna embedding em semantic_memory
+    const { rows } = await client.query<{ atttypmod: number }>(`
+      SELECT atttypmod FROM pg_attribute
+      WHERE attrelid = 'semantic_memory'::regclass AND attname = 'embedding'
+    `);
+    if (rows.length && rows[0].atttypmod !== EMBED_DIMS) {
+      await client.query(`DROP INDEX IF EXISTS semantic_memory_vec`);
+      await client.query(`ALTER TABLE semantic_memory ALTER COLUMN embedding TYPE vector(${EMBED_DIMS}) USING NULL::vector(${EMBED_DIMS})`);
+      await client.query(`DROP INDEX IF EXISTS episodes_vec`);
+      await client.query(`ALTER TABLE episodes ALTER COLUMN embedding TYPE vector(${EMBED_DIMS}) USING NULL::vector(${EMBED_DIMS})`);
+    }
+  } catch {
+    // migração não crítica — tabelas podem não existir ainda
+  }
+}
 
 export async function initSchema(): Promise<void> {
   const client = await pool.connect();
@@ -23,7 +44,7 @@ export async function initSchema(): Promise<void> {
         key         TEXT NOT NULL,
         value       TEXT NOT NULL,
         confidence  REAL DEFAULT 1.0,
-        embedding   vector(1536),
+        embedding   vector(${EMBED_DIMS}),
         last_used   BIGINT NOT NULL,
         created_at  BIGINT NOT NULL,
         UNIQUE (type, key)
@@ -48,7 +69,7 @@ export async function initSchema(): Promise<void> {
         summary     TEXT NOT NULL,
         topics      TEXT[] NOT NULL DEFAULT '{}',
         transcript  TEXT NOT NULL DEFAULT '',
-        embedding   vector(1536),
+        embedding   vector(${EMBED_DIMS}),
         started_at  BIGINT NOT NULL,
         ended_at    BIGINT NOT NULL
       )
@@ -64,6 +85,8 @@ export async function initSchema(): Promise<void> {
       ON episodes
       USING hnsw (embedding vector_cosine_ops)
     `);
+
+    await migrateVectorDims(client);
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS procedures (

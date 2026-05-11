@@ -1,4 +1,5 @@
 import { pool } from "./db.js";
+import { embed, isAvailable, toSql } from "./embeddings.js";
 import type { Episode } from "./types.js";
 
 export async function saveEpisode(
@@ -9,11 +10,20 @@ export async function saveEpisode(
 ): Promise<Episode> {
   const ended_at = Date.now();
 
+  let embeddingSql: string | null = null;
+  if (await isAvailable()) {
+    try {
+      embeddingSql = toSql(await embed(summary));
+    } catch {
+      // continua sem vetor
+    }
+  }
+
   const { rows } = await pool.query<Episode>(
-    `INSERT INTO episodes (summary, topics, transcript, started_at, ended_at)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO episodes (summary, topics, transcript, embedding, started_at, ended_at)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [summary, topics, transcript, started_at, ended_at]
+    [summary, topics, transcript, embeddingSql, started_at, ended_at]
   );
 
   return rows[0];
