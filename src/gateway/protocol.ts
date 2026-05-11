@@ -5,6 +5,7 @@ export type ClientMessage =
   | { type: "chat"; content: string }
   | { type: "set_effort"; effort: "low" | "medium" | "high" }
   | { type: "compact" }
+  | { type: "request_status" }
   | { type: "reset" }
   | { type: "ping" };
 

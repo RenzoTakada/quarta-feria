@@ -87,6 +87,9 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
     case "compact":
       handleCompact(ws);
       break;
+    case "request_status":
+      send(ws, { type: "token_update", snapshot: session.tracker.snapshot() });
+      break;
     case "reset":
       session.reset();
       send(ws, { type: "ready" });

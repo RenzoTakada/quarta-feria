@@ -250,6 +250,14 @@ export default function App() {
 
     if (key.return) {
       if (!input.trim()) return;
+      // Se há sugestões e o input ainda não é o valor completo, completa em vez de enviar
+      if (suggestions.length > 0) {
+        const completed = completionValue(suggestions[selectedIdx]);
+        if (input.trimEnd() !== completed.trimEnd()) {
+          setInput(completed);
+          return;
+        }
+      }
       if (busyRef.current) {
         // Enfileira em vez de descartar
         pendingQueue.current.push(input);

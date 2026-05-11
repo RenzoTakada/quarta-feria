@@ -59,6 +59,8 @@ export async function handleCommand(
       return { type: "output", text: HELP };
 
     case "status": {
+      // Pede ao gateway o snapshot mais recente (vai atualizar o TUI via token_update)
+      wsAction?.({ type: "request_status" });
       if (!ctx) return { type: "output", text: "No session data available yet." };
       const { snap, model, effort } = ctx;
       const MODEL_LABEL: Record<string, string> = {
