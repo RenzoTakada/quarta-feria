@@ -1,0 +1,21 @@
+services:
+  brain:
+    image: pgvector/pgvector:pg16
+    container_name: quarta-feria-brain
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: quarta_feria
+      POSTGRES_USER: quarta
+      POSTGRES_PASSWORD: feria
+    ports:
+      - "5432:5432"
+    volumes:
+      - brain_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quarta -d quarta_feria"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  brain_data:

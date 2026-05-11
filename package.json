@@ -1,0 +1,38 @@
+{
+  "name": "quarta-feria",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "quarta-feira": "./bin/quarta-feira"
+  },
+  "scripts": {
+    "test:brain": "tsx src/brain/test.ts",
+    "test:agent": "tsx src/agent/test.ts",
+    "start": "tsx src/start.tsx",
+    "gateway": "tsx src/gateway/server.ts",
+    "tui": "tsx src/tui/index.tsx",
+    "dev": "tsx src/agent/test.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^19.2.14",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.1",
+    "dotenv": "^17.4.2",
+    "ink": "^7.0.2",
+    "pg": "^8.20.0",
+    "pgvector": "^0.2.1",
+    "react": "^19.2.6",
+    "ws": "^8.20.0"
+  }
+}
