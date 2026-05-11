@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import dotenv from "dotenv";
 import { saveEpisode } from "./episodic.js";
 import type { Message } from "../agent/core.js";
+import { config } from "../config.js";
 
 dotenv.config();
 
@@ -25,6 +26,48 @@ function buildTranscript(history: Message[]): string {
     })
     .filter(Boolean)
     .join("\n");
+}
+
+// Comprime o histórico mid-session: resume as mensagens antigas com haiku
+// e mantém apenas as últimas N mensagens completas.
+export async function compactHistory(
+  history: Message[],
+  keepTurns = 2
+): Promise<{ compacted: Message[]; summary: string; removedCount: number }> {
+  const keepMessages = keepTurns * 2; // cada turn = user + assistant
+  if (history.length <= keepMessages + 2) {
+    return { compacted: history, summary: "", removedCount: 0 };
+  }
+
+  const toCompress = history.slice(0, -keepMessages);
+  const toKeep     = history.slice(-keepMessages);
+
+  const transcript = buildTranscript(toCompress);
+  if (!transcript.trim()) {
+    return { compacted: history, summary: "", removedCount: 0 };
+  }
+
+  const response = await client.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 400,
+    messages: [{
+      role: "user",
+      content: `Resuma a conversa abaixo em 4-6 frases em português. Preserve fatos concretos, decisões, código mencionado e contexto técnico. Seja denso e direto — sem intro, sem conclusão.
+
+Conversa:
+${transcript.slice(0, 6000)}`,
+    }],
+  });
+
+  const summary = response.content[0].type === "text" ? response.content[0].text.trim() : transcript.slice(0, 500);
+
+  const compacted: Message[] = [
+    { role: "user",      content: `[contexto das mensagens anteriores]\n${summary}` },
+    { role: "assistant", content: "Contexto carregado." },
+    ...toKeep,
+  ];
+
+  return { compacted, summary, removedCount: toCompress.length };
 }
 
 export async function compressSession(

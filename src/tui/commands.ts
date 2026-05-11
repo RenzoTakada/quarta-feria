@@ -22,7 +22,8 @@ const RISKY_PATTERNS = [
 const HELP = `Comandos disponíveis:
 
   /help                 esta ajuda
-  /effort low|medium|high   nível de raciocínio (afeta custo e qualidade)
+  /effort low|medium|high   modelo usado (low=haiku, medium=sonnet, high=opus)
+  /compact              comprime histórico longo com haiku (libera contexto)
   /memory               lista todas as memórias
   /memory search <q>    busca memórias por texto
   /memory delete <key>  remove memória por chave
@@ -51,11 +52,16 @@ export async function handleCommand(
     case "effort": {
       const level = args[0] as "low" | "medium" | "high" | undefined;
       if (!level || !["low", "medium", "high"].includes(level)) {
-        return { type: "output", text: "Uso: /effort low|medium|high\n\n  low    — resposta direta, pouco raciocínio, menor custo\n  medium — equilíbrio entre qualidade e custo\n  high   — raciocínio extenso, maior qualidade, maior custo" };
+        return { type: "output", text: "Uso: /effort low|medium|high\n\n  low    — haiku   · rápido, econômico, sem thinking\n  medium — sonnet  · equilibrado\n  high   — opus    · raciocínio estendido, maior custo" };
       }
       wsAction?.({ type: "set_effort", effort: level });
-      const labels = { low: "baixo (econômico)", medium: "médio (equilibrado)", high: "alto (máxima qualidade)" };
-      return { type: "output", text: `Raciocínio → ${labels[level]}\nVale para as próximas mensagens desta sessão.` };
+      const labels = { low: "haiku (econômico)", medium: "sonnet (equilibrado)", high: "opus (máxima qualidade)" };
+      return { type: "output", text: `Modelo → ${labels[level]}\nVale para as próximas mensagens desta sessão.` };
+    }
+
+    case "compact": {
+      wsAction?.({ type: "compact" });
+      return { type: "output", text: "Compactando histórico…" };
     }
 
     case "memory": {

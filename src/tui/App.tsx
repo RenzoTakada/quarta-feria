@@ -9,10 +9,10 @@ import { Messages } from "./components/Messages.js";
 import { ThinkingIndicator } from "./components/Thinking.js";
 import { InputArea } from "./components/InputArea.js";
 import { config } from "../config.js";
+import { EFFORT_MODEL } from "../agent/core.js";
 import { handleCommand } from "./commands.js";
 
 const GATEWAY = `ws://127.0.0.1:${config.gateway.port}`;
-const MODEL   = config.agent.model;
 
 const DEFAULT_SNAP: TokenSnapshot = {
   contextUsed: 0, contextLimit: 200_000, contextPct: 0,
@@ -60,6 +60,7 @@ export default function App() {
   const [outputChars, setOutputChars]   = useState(0);
   const [tokenSnap, setTokenSnap]       = useState<TokenSnapshot>(DEFAULT_SNAP);
   const [queueLen, setQueueLen]         = useState(0);
+  const [effort, setEffort]             = useState<"low" | "medium" | "high">(config.agent.effort as "low" | "medium" | "high");
 
   const ws             = useRef<WebSocket | null>(null);
   const msgId          = useRef(0);
@@ -141,6 +142,13 @@ export default function App() {
           doReset();
           break;
 
+        case "info":
+          setMessages((prev) => [
+            ...prev,
+            { id: ++msgId.current, role: "assistant", content: msg.message },
+          ]);
+          break;
+
         case "error":
           setMessages((prev) => [
             ...prev,
@@ -162,6 +170,11 @@ export default function App() {
       if (content.startsWith("/")) {
         const wsAction = (payload: object) => ws.current?.send(JSON.stringify(payload));
         const result = await handleCommand(content, wsAction);
+        // Sincroniza effort local se o comando mudou
+        const parts = content.trim().split(/\s+/);
+        if (parts[0] === "/effort" && ["low", "medium", "high"].includes(parts[1])) {
+          setEffort(parts[1] as "low" | "medium" | "high");
+        }
         if (result.type === "output") {
           setMessages((prev) => [...prev,
             { id: ++msgId.current, role: "user", content },
@@ -238,7 +251,7 @@ export default function App() {
 
   return (
     <Box flexDirection="column" height={rows}>
-      <StatusBar snap={tokenSnap} model={MODEL} connected={connected} />
+      <StatusBar snap={tokenSnap} model={EFFORT_MODEL[effort]} effort={effort} connected={connected} />
       {!userHasSpoken && <Banner />}
       <Messages messages={visible} />
       {thinking && (

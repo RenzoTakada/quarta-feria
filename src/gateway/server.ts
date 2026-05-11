@@ -4,7 +4,7 @@ import { initSchema, closePool } from "../brain/db.js";
 import { chat } from "../agent/core.js";
 import { session } from "./session.js";
 import { encode, decode, type ClientMessage } from "./protocol.js";
-import { compressSession } from "../brain/compressor.js";
+import { compressSession, compactHistory } from "../brain/compressor.js";
 
 import { config } from "../config.js";
 
@@ -57,6 +57,24 @@ async function handleChat(ws: WebSocket, content: string): Promise<void> {
   }
 }
 
+async function handleCompact(ws: WebSocket): Promise<void> {
+  if (session.busy) {
+    send(ws, { type: "error", message: "Agente ocupado." });
+    return;
+  }
+  try {
+    const { compacted, removedCount } = await compactHistory(session.history);
+    if (removedCount === 0) {
+      send(ws, { type: "info", message: "Histórico curto demais para compactar (< 4 turns)." });
+      return;
+    }
+    session.history = compacted;
+    send(ws, { type: "info", message: `Histórico comprimido — ${removedCount} mensagens resumidas em 2 linhas. Contexto liberado.` });
+  } catch (err) {
+    send(ws, { type: "error", message: `Falha ao compactar: ${(err as Error).message}` });
+  }
+}
+
 function handleMessage(ws: WebSocket, msg: ClientMessage): void {
   switch (msg.type) {
     case "chat":
@@ -65,6 +83,9 @@ function handleMessage(ws: WebSocket, msg: ClientMessage): void {
     case "set_effort":
       session.effort = msg.effort;
       console.log(`[gateway] effort → ${msg.effort}`);
+      break;
+    case "compact":
+      handleCompact(ws);
       break;
     case "reset":
       session.reset();

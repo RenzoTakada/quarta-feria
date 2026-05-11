@@ -4,6 +4,7 @@ import type { TokenSnapshot } from "../agent/tokens.js";
 export type ClientMessage =
   | { type: "chat"; content: string }
   | { type: "set_effort"; effort: "low" | "medium" | "high" }
+  | { type: "compact" }
   | { type: "reset" }
   | { type: "ping" };
 
@@ -15,6 +16,7 @@ export type ServerMessage =
   | { type: "tool_result"; name: string; result: string }
   | { type: "token_update"; snapshot: TokenSnapshot }
   | { type: "done"; response: string }
+  | { type: "info"; message: string }
   | { type: "error"; message: string }
   | { type: "pong" }
   | { type: "ready" };

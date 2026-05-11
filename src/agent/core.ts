@@ -8,12 +8,15 @@ import { config } from "../config.js";
 
 dotenv.config();
 
-const MODEL = config.agent.model;
 const MAX_TOKENS = 16000;
-
-// Mantém no máximo N mensagens no histórico (mais antigas são descartadas)
-// Isso evita que o contexto cresça sem limite entre turns
 const MAX_HISTORY_MESSAGES = 20;
+
+// effort → modelo. Haiku é ~60x mais barato que Opus para tarefas cotidianas.
+export const EFFORT_MODEL: Record<"low" | "medium" | "high", string> = {
+  low:    "claude-haiku-4-5-20251001",
+  medium: "claude-sonnet-4-6",
+  high:   "claude-opus-4-7",
+};
 
 export type AgentEvents = {
   onThinking: (text: string) => void;
@@ -32,7 +35,6 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-// Remove blocos de thinking do histórico — são grandes e não precisam ser reenviados
 function stripThinkingBlocks(messages: Message[]): Message[] {
   return messages.map((m) => {
     if (m.role !== "assistant" || typeof m.content === "string") return m;
@@ -43,12 +45,9 @@ function stripThinkingBlocks(messages: Message[]): Message[] {
   });
 }
 
-// Descarta as mensagens mais antigas quando o histórico cresce demais
 function trimHistory(messages: Message[]): Message[] {
   if (messages.length <= MAX_HISTORY_MESSAGES) return messages;
-  // Remove os mais antigos, preservando pares user/assistant completos
-  const excess = messages.length - MAX_HISTORY_MESSAGES;
-  return messages.slice(excess);
+  return messages.slice(messages.length - MAX_HISTORY_MESSAGES);
 }
 
 export async function chat(
@@ -58,10 +57,9 @@ export async function chat(
   tracker: TokenTracker,
   effort: "low" | "medium" | "high" = config.agent.effort
 ): Promise<{ response: string; updatedHistory: Message[] }> {
+  const model = EFFORT_MODEL[effort];
   const context = await buildContext(userMessage);
   const systemPrompt = PERSONALITY + context;
-
-  // Limpa e apara histórico antes de enviar
   const cleanHistory = trimHistory(stripThinkingBlocks(history));
 
   const messages: Message[] = [
@@ -73,15 +71,22 @@ export async function chat(
   let continueLoop = true;
 
   while (continueLoop) {
-    const stream = client.messages.stream({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      thinking: { type: "adaptive" },
-      output_config: { effort },
-      system: systemPrompt,
-      messages,
-      tools: TOOL_DEFINITIONS,
-    } as Parameters<typeof client.messages.stream>[0]);
+    // Thinking só está disponível no Opus (effort "high")
+    const streamParams = effort === "high"
+      ? {
+          model, max_tokens: MAX_TOKENS,
+          thinking: { type: "adaptive" },
+          output_config: { effort: "high" },
+          system: systemPrompt, messages, tools: TOOL_DEFINITIONS,
+        }
+      : {
+          model, max_tokens: MAX_TOKENS,
+          system: systemPrompt, messages, tools: TOOL_DEFINITIONS,
+        };
+
+    const stream = client.messages.stream(
+      streamParams as Parameters<typeof client.messages.stream>[0]
+    );
 
     for await (const event of stream) {
       if (event.type === "content_block_delta") {
@@ -96,7 +101,6 @@ export async function chat(
     }
 
     const message = await stream.finalMessage();
-
     const httpResponse = stream.response as Response | undefined;
     tracker.update(message.usage, httpResponse?.headers as unknown as Headers);
     events.onTokenUpdate(tracker.snapshot());

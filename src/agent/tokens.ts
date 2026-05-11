@@ -67,14 +67,26 @@ export class TokenTracker {
   }
 }
 
-export function formatCompact(snap: TokenSnapshot, model: string): string {
+const MODEL_SHORT: Record<string, string> = {
+  "claude-haiku-4-5-20251001": "haiku",
+  "claude-sonnet-4-6":         "sonnet",
+  "claude-opus-4-7":           "opus",
+};
+
+export function formatCompact(
+  snap: TokenSnapshot,
+  model: string,
+  effort: "low" | "medium" | "high" = "low"
+): string {
   const k = (n: number) => {
     if (n < 1000) return `${n}`;
     const v = n / 1000;
     return v % 1 === 0 ? `${v}k` : `${v.toFixed(1)}k`;
   };
+  const shortModel = MODEL_SHORT[model] ?? model;
+  const thinkLabel = effort === "high" ? "think on" : "think off";
   const reset = snap.resetsIn && snap.resetsIn !== "agora" ? ` | renova em ${snap.resetsIn}` : "";
-  return `${model} | think high | tokens ${k(snap.contextUsed)}/${k(snap.contextLimit)} (${snap.contextPct}%)${reset}`;
+  return `${shortModel} | ${thinkLabel} | tokens ${k(snap.contextUsed)}/${k(snap.contextLimit)} (${snap.contextPct}%)${reset}`;
 }
 
 function formatTimeLeft(date: Date): string {
