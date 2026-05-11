@@ -2,6 +2,7 @@ import { recall, search, forget } from "../brain/semantic.js";
 import { recentEpisodes } from "../brain/episodic.js";
 import { topProcedures } from "../brain/procedures.js";
 import { config } from "../config.js";
+import { estimateCost, formatCost, type TokenSnapshot } from "../agent/tokens.js";
 
 export type CommandResult =
   | { type: "output"; text: string }
@@ -19,26 +20,34 @@ const RISKY_PATTERNS = [
   "TRUNCATE", "chmod 777", "kill -9", "mkfs",
 ];
 
-const HELP = `Comandos disponíveis:
+const HELP = `Available commands:
 
-  /help                 esta ajuda
-  /effort low|medium|high   modelo usado (low=haiku, medium=sonnet, high=opus)
-  /compact              comprime histórico longo com haiku (libera contexto)
-  /memory               lista todas as memórias
-  /memory search <q>    busca memórias por texto
-  /memory delete <key>  remove memória por chave
-  /memory health        resumo do estado do cérebro
-  /sessions             sessões recentes
-  /procedures           padrões aprendidos
-  /config               configuração atual
-  /tools                ferramentas disponíveis
-  /safety               regras de segurança bash`;
+  /help                    this help
+  /status                  session tokens and estimated cost
+  /effort low|medium|high  switch model (low=haiku, medium=sonnet, high=opus)
+  /compact                 compress history with haiku (free context)
+  /memory                  list all memories
+  /memory search <q>       search memories by text
+  /memory delete <key>     remove memory by key
+  /memory health           brain state summary
+  /sessions                recent sessions
+  /procedures              learned patterns
+  /config                  current configuration
+  /tools                   available tools
+  /safety                  bash safety rules`;
 
 export type WsAction = (payload: object) => void;
 
+export type CommandContext = {
+  snap: TokenSnapshot;
+  model: string;
+  effort: "low" | "medium" | "high";
+};
+
 export async function handleCommand(
   input: string,
-  wsAction?: WsAction
+  wsAction?: WsAction,
+  ctx?: CommandContext
 ): Promise<CommandResult> {
   if (!input.startsWith("/")) return { type: "not_a_command" };
 
@@ -48,6 +57,36 @@ export async function handleCommand(
   switch (cmd) {
     case "help":
       return { type: "output", text: HELP };
+
+    case "status": {
+      if (!ctx) return { type: "output", text: "No session data available yet." };
+      const { snap, model, effort } = ctx;
+      const MODEL_LABEL: Record<string, string> = {
+        "claude-haiku-4-5-20251001": "haiku",
+        "claude-sonnet-4-6":         "sonnet",
+        "claude-opus-4-7":           "opus",
+      };
+      const k = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
+      const cost = estimateCost(model, snap.sessionInputTokens, snap.sessionOutputTokens);
+      const inputCost  = estimateCost(model, snap.sessionInputTokens, 0);
+      const outputCost = estimateCost(model, 0, snap.sessionOutputTokens);
+      const lines = [
+        `Session — ${MODEL_LABEL[model] ?? model} (effort ${effort})`,
+        ``,
+        `  input:     ${k(snap.sessionInputTokens).padStart(7)} tokens   ~${formatCost(inputCost)}`,
+        `  output:    ${k(snap.sessionOutputTokens).padStart(7)} tokens   ~${formatCost(outputCost)}`,
+        snap.sessionThinkingTokens > 0
+          ? `  thinking:  ${k(snap.sessionThinkingTokens).padStart(7)} tokens`
+          : `  thinking:  —`,
+        `  estimated: ${"".padStart(16)}~${formatCost(cost)}`,
+        ``,
+        `Context: ${k(snap.contextUsed)} / ${k(snap.contextLimit)} tokens (${snap.contextPct}%)`,
+        snap.rateLimitRemaining !== null
+          ? `Rate limit: ${k(snap.rateLimitRemaining)} remaining${snap.resetsIn ? ` · resets in ${snap.resetsIn}` : ""}`
+          : `Rate limit: unknown`,
+      ];
+      return { type: "output", text: lines.join("\n") };
+    }
 
     case "effort": {
       const level = args[0] as "low" | "medium" | "high" | undefined;

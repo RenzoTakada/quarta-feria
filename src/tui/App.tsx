@@ -11,7 +11,7 @@ import { InputArea } from "./components/InputArea.js";
 import { Suggestions } from "./components/Suggestions.js";
 import { config } from "../config.js";
 import { EFFORT_MODEL } from "../agent/core.js";
-import { handleCommand } from "./commands.js";
+import { handleCommand, type CommandContext } from "./commands.js";
 import { getSuggestions, completionValue } from "./completions.js";
 
 const GATEWAY = `ws://127.0.0.1:${config.gateway.port}`;
@@ -175,7 +175,8 @@ export default function App() {
       // Intercepta comandos internos /
       if (content.startsWith("/")) {
         const wsAction = (payload: object) => ws.current?.send(JSON.stringify(payload));
-        const result = await handleCommand(content, wsAction);
+        const cmdCtx: CommandContext = { snap: tokenSnap, model: EFFORT_MODEL[effort], effort };
+        const result = await handleCommand(content, wsAction, cmdCtx);
         // Sincroniza effort local se o comando mudou
         const parts = content.trim().split(/\s+/);
         if (parts[0] === "/effort" && ["low", "medium", "high"].includes(parts[1])) {
