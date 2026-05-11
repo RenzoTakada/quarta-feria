@@ -274,19 +274,37 @@ export default function App() {
     if (!key.ctrl && !key.meta && char) setInput((p) => p + char);
   });
 
-  // Calcula quantas mensagens cabem na tela
-  const rows        = stdout.rows || 24;
+  const rows        = stdout.rows    || 24;
+  const cols        = stdout.columns || 80;
   const suggestions = getSuggestions(input);
-  const fixedRows   = 3 + (thinking ? 1 : 0) + suggestions.length;
-  const msgSlots    = Math.max(1, Math.floor((rows - fixedRows) / 3));
+  // fixedRows: statusbar(1) + inputarea(2) + thinking(1?) + suggestions + paddingTop(1) in Messages
+  const fixedRows   = 4 + (thinking ? 1 : 0) + suggestions.length;
+  const availRows   = Math.max(2, rows - fixedRows);
 
-  const displayMsgs: ChatMessage[] = streaming
+  // Conta linhas reais de uma mensagem baseado na largura do terminal
+  function msgLines(msg: ChatMessage): number {
+    const textLines = msg.content.split("\n").reduce((sum, line) =>
+      sum + Math.max(1, Math.ceil((line.length || 1) / Math.max(1, cols - 4))), 0
+    );
+    return 1 + textLines + 1; // linha do role + conteúdo + marginBottom
+  }
+
+  const allMsgs: ChatMessage[] = streaming
     ? [...messages, { id: -1, role: "assistant", content: streaming }]
     : messages;
 
-  const visible = displayMsgs.slice(-msgSlots);
+  // Seleciona da mensagem mais recente para a mais antiga até preencher o espaço
+  const visible: ChatMessage[] = [];
+  let usedRows = 0;
+  for (let i = allMsgs.length - 1; i >= 0; i--) {
+    const n = msgLines(allMsgs[i]);
+    if (usedRows + n > availRows) break;
+    visible.unshift(allMsgs[i]);
+    usedRows += n;
+  }
 
   const userHasSpoken = messages.some((m) => m.role === "user");
+
 
   return (
     <Box flexDirection="column" height={rows}>
