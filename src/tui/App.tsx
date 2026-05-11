@@ -9,6 +9,7 @@ import { Messages } from "./components/Messages.js";
 import { ThinkingIndicator } from "./components/Thinking.js";
 import { InputArea } from "./components/InputArea.js";
 import { config } from "../config.js";
+import { handleCommand } from "./commands.js";
 
 const GATEWAY = `ws://127.0.0.1:${config.gateway.port}`;
 const MODEL   = config.agent.model;
@@ -120,8 +121,27 @@ export default function App() {
   }, []);
 
   const send = useCallback(
-    (content: string) => {
+    async (content: string) => {
       if (!content.trim() || busy || !ws.current) return;
+
+      // Intercepta comandos internos /
+      if (content.startsWith("/")) {
+        const result = await handleCommand(content);
+        if (result.type === "output") {
+          setMessages((prev) => [...prev,
+            { id: ++msgId.current, role: "user", content },
+            { id: ++msgId.current, role: "assistant", content: result.text },
+          ]);
+          return;
+        }
+        if (result.type === "unknown") {
+          setMessages((prev) => [...prev,
+            { id: ++msgId.current, role: "assistant", content: `Comando desconhecido: "${content}"\nDigite /help para ver os disponíveis.` },
+          ]);
+          return;
+        }
+      }
+
       setMessages((prev) => [...prev, { id: ++msgId.current, role: "user", content }]);
       setBusy(true);
       setThinking(true);
