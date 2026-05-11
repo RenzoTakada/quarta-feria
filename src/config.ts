@@ -18,7 +18,7 @@ const DEFAULTS: Config = {
 };
 
 function load(): Config {
-  const configPath = path.join(os.homedir(), ".quarta-feira", "config.yaml");
+  const configPath = path.join(os.homedir(), ".quarta-feria", "config.yaml");
   if (!fs.existsSync(configPath)) return DEFAULTS;
 
   try {

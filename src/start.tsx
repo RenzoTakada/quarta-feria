@@ -4,9 +4,11 @@ import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { fileURLToPath } from "url";
 import App from "./tui/App.js";
 
-const ROOT = path.resolve(path.dirname(""));
+// start.tsx está em src/ — ROOT é um nível acima
+const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const LOG_DIR  = path.join(os.homedir(), ".quarta-feria");
 const LOG_PATH = path.join(LOG_DIR, "gateway.log");
 
@@ -19,19 +21,28 @@ const gateway = spawn(
 );
 
 gateway.on("error", (err) => {
-  // Porta já ocupada — TUI conecta no gateway existente
   if ((err as NodeJS.ErrnoException).code !== "EADDRINUSE") {
     process.stderr.write(`[gateway] ${err.message}\n`);
   }
 });
 
-// Pequena espera para o gateway subir antes do TUI conectar
+let cleanedUp = false;
+function cleanup() {
+  if (cleanedUp) return;
+  cleanedUp = true;
+  gateway.kill();
+  try { fs.closeSync(logFd); } catch {}
+}
+
+process.on("SIGINT",  () => { cleanup(); process.exit(0); });
+process.on("SIGTERM", () => { cleanup(); process.exit(0); });
+process.on("exit",    cleanup);
+
 setTimeout(() => {
   const { waitUntilExit } = render(<App />);
 
   waitUntilExit().then(() => {
-    gateway.kill();
-    fs.closeSync(logFd);
+    cleanup();
     process.exit(0);
   });
 }, 800);
