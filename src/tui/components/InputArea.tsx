@@ -4,9 +4,10 @@ import { Box, Text, useStdout } from "ink";
 interface Props {
   value: string;
   busy: boolean;
+  queueLen?: number;
 }
 
-export function InputArea({ value, busy }: Props) {
+export function InputArea({ value, busy, queueLen = 0 }: Props) {
   const { stdout } = useStdout();
   const hr = "─".repeat(stdout.columns || 80);
 
@@ -17,6 +18,9 @@ export function InputArea({ value, busy }: Props) {
         <Text color="cyan">❯ </Text>
         <Text>{value}</Text>
         {!busy && <Text color="cyan">█</Text>}
+        {queueLen > 0 && (
+          <Text dimColor>  (+{queueLen} na fila)</Text>
+        )}
       </Box>
     </Box>
   );

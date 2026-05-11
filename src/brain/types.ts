@@ -15,6 +15,7 @@ export interface Episode {
   summary: string;
   topics: string[];
   transcript: string;
+  embedding: string | null;
   started_at: number;
   ended_at: number;
 }

@@ -26,6 +26,24 @@ export interface ChatMessage {
   content: string;
 }
 
+function resetBusyState(
+  setThinking: (v: boolean) => void,
+  setThinkingDone: (v: boolean) => void,
+  setStreaming: (v: string) => void,
+  setOutputChars: (v: number) => void,
+  setBusy: (v: boolean) => void,
+  streamRef: React.MutableRefObject<string>,
+  thinkingEndRef: React.MutableRefObject<boolean>
+) {
+  streamRef.current = "";
+  thinkingEndRef.current = false;
+  setStreaming("");
+  setThinking(false);
+  setThinkingDone(false);
+  setOutputChars(0);
+  setBusy(false);
+}
+
 export default function App() {
   const { exit }   = useApp();
   const { stdout } = useStdout();
@@ -41,18 +59,28 @@ export default function App() {
   const [startTime, setStartTime]       = useState(Date.now());
   const [outputChars, setOutputChars]   = useState(0);
   const [tokenSnap, setTokenSnap]       = useState<TokenSnapshot>(DEFAULT_SNAP);
+  const [queueLen, setQueueLen]         = useState(0);
 
   const ws             = useRef<WebSocket | null>(null);
   const msgId          = useRef(0);
   const streamRef      = useRef("");
   const thinkingStart  = useRef(Date.now());
   const thinkingEndRef = useRef(false);
+  const busyRef        = useRef(false);
+  const pendingQueue   = useRef<string[]>([]);
+
+  // Mantém busyRef sincronizado com busy para acesso em closures
+  useEffect(() => { busyRef.current = busy; }, [busy]);
+
+  const doReset = useCallback(() => {
+    resetBusyState(setThinking, setThinkingDone, setStreaming, setOutputChars, setBusy, streamRef, thinkingEndRef);
+  }, []);
 
   useEffect(() => {
     const socket = new WebSocket(GATEWAY);
     ws.current = socket;
 
-    socket.on("open",  () => {
+    socket.on("open", () => {
       setConnected(true);
       setMessages([{
         id: ++msgId.current,
@@ -60,8 +88,23 @@ export default function App() {
         content: `Olá, ${config.user.name}. O que vamos fazer hoje?`,
       }]);
     });
-    socket.on("close", () => setConnected(false));
-    socket.on("error", () => setConnected(false));
+
+    socket.on("close", () => {
+      setConnected(false);
+      // Se estava ocupado quando a conexão caiu, desbloqueia o UI
+      if (busyRef.current) {
+        doReset();
+        setMessages((prev) => [
+          ...prev,
+          { id: ++msgId.current, role: "assistant", content: "[conexão perdida — resposta interrompida]" },
+        ]);
+      }
+    });
+
+    socket.on("error", () => {
+      setConnected(false);
+      if (busyRef.current) doReset();
+    });
 
     socket.on("message", (raw: Buffer) => {
       const msg = JSON.parse(raw.toString()) as ServerMessage;
@@ -95,13 +138,7 @@ export default function App() {
             ...prev,
             { id: ++msgId.current, role: "assistant", content: msg.response },
           ]);
-          streamRef.current = "";
-          setStreaming("");
-          setThinking(false);
-          setThinkingDone(false);
-          thinkingEndRef.current = false;
-          setOutputChars(0);
-          setBusy(false);
+          doReset();
           break;
 
         case "error":
@@ -109,20 +146,17 @@ export default function App() {
             ...prev,
             { id: ++msgId.current, role: "assistant", content: `[erro] ${msg.message}` },
           ]);
-          streamRef.current = "";
-          setStreaming("");
-          setThinking(false);
-          setBusy(false);
+          doReset();
           break;
       }
     });
 
     return () => socket.close();
-  }, []);
+  }, [doReset]);
 
   const send = useCallback(
     async (content: string) => {
-      if (!content.trim() || busy || !ws.current) return;
+      if (!content.trim() || busyRef.current || !ws.current) return;
 
       // Intercepta comandos internos /
       if (content.startsWith("/")) {
@@ -143,6 +177,7 @@ export default function App() {
       }
 
       setMessages((prev) => [...prev, { id: ++msgId.current, role: "user", content }]);
+      busyRef.current = true;
       setBusy(true);
       setThinking(true);
       setThinkingDone(false);
@@ -154,12 +189,35 @@ export default function App() {
       thinkingStart.current = now;
       ws.current.send(JSON.stringify({ type: "chat", content }));
     },
-    [busy]
+    []
   );
+
+  // Quando busy vira false, processa próximo item da fila
+  useEffect(() => {
+    if (!busy && pendingQueue.current.length > 0) {
+      const next = pendingQueue.current.shift()!;
+      setQueueLen(pendingQueue.current.length);
+      send(next);
+    }
+  }, [busy, send]);
 
   useInput((char, key) => {
     if (key.ctrl && char === "c") { exit(); return; }
-    if (key.return)               { send(input); setInput(""); return; }
+
+    if (key.return) {
+      if (!input.trim()) return;
+      if (busyRef.current) {
+        // Enfileira em vez de descartar
+        pendingQueue.current.push(input);
+        setQueueLen(pendingQueue.current.length);
+        setInput("");
+      } else {
+        send(input);
+        setInput("");
+      }
+      return;
+    }
+
     if (key.backspace || key.delete) { setInput((p) => p.slice(0, -1)); return; }
     if (!key.ctrl && !key.meta && char) setInput((p) => p + char);
   });
@@ -190,7 +248,7 @@ export default function App() {
           outputChars={outputChars}
         />
       )}
-      <InputArea value={input} busy={busy} />
+      <InputArea value={input} busy={busy} queueLen={queueLen} />
     </Box>
   );
 }
