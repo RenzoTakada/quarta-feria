@@ -1,12 +1,14 @@
 import { recall } from "../brain/semantic.js";
 import { recentEpisodes } from "../brain/episodic.js";
+import { topProcedures } from "../brain/procedures.js";
 
 export async function buildContext(): Promise<string> {
-  const [userFacts, preferences, projects, episodes] = await Promise.all([
+  const [userFacts, preferences, projects, episodes, procedures] = await Promise.all([
     recall("user_fact"),
     recall("preference"),
     recall("project"),
     recentEpisodes(5),
+    topProcedures(5),
   ]);
 
   const lines: string[] = ["\n\n---\n## O que você já sabe"];
@@ -33,6 +35,11 @@ export async function buildContext(): Promise<string> {
       lines.push(`- [${date}] ${e.summary}`);
       if (e.topics.length > 0) lines.push(`  tópicos: ${e.topics.join(", ")}`);
     });
+  }
+
+  if (procedures.length > 0) {
+    lines.push("\n### Padrões aprendidos");
+    procedures.forEach((p) => lines.push(`- quando "${p.trigger}" → ${p.pattern}`));
   }
 
   if (lines.length === 1) return "";

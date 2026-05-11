@@ -4,10 +4,11 @@ import { PERSONALITY } from "./personality.js";
 import { buildContext } from "./context.js";
 import { TOOL_DEFINITIONS, executeTool } from "./tools/index.js";
 import { TokenTracker, type TokenSnapshot } from "./tokens.js";
+import { config } from "../config.js";
 
 dotenv.config();
 
-const MODEL = "claude-opus-4-7";
+const MODEL = config.agent.model;
 const MAX_TOKENS = 16000;
 
 export type AgentEvents = {
@@ -49,7 +50,7 @@ export async function chat(
       model: MODEL,
       max_tokens: MAX_TOKENS,
       thinking: { type: "adaptive" },
-      output_config: { effort: "high" },
+      output_config: { effort: config.agent.effort },
       system: systemPrompt,
       messages,
       tools: TOOL_DEFINITIONS,

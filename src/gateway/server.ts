@@ -6,9 +6,11 @@ import { session } from "./session.js";
 import { encode, decode, type ClientMessage } from "./protocol.js";
 import { compressSession } from "../brain/compressor.js";
 
+import { config } from "../config.js";
+
 dotenv.config();
 
-const PORT = parseInt(process.env.GATEWAY_PORT ?? "18790", 10);
+const PORT = parseInt(process.env.GATEWAY_PORT ?? String(config.gateway.port), 10);
 
 function send(ws: WebSocket, msg: Parameters<typeof encode>[0]): void {
   if (ws.readyState === WebSocket.OPEN) ws.send(encode(msg));

@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { runBash } from "./bash.js";
 import { memorySearch, memorySave } from "./memory.js";
+import { procedureSearch, procedureSave } from "./procedures.js";
 
 export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
   {
@@ -42,6 +43,29 @@ export const TOOL_DEFINITIONS: Anthropic.Tool[] = [
       required: ["type", "key", "value"],
     },
   },
+  {
+    name: "procedure_search",
+    description: "Busca padrões aprendidos: quando X acontece, fazer Y.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "O gatilho ou situação a buscar." },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "procedure_save",
+    description: "Salva um padrão aprendido: quando X, fazer Y.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        trigger: { type: "string", description: "A situação ou gatilho." },
+        pattern: { type: "string", description: "O que fazer nessa situação." },
+      },
+      required: ["trigger", "pattern"],
+    },
+  },
 ];
 
 export async function executeTool(
@@ -55,6 +79,10 @@ export async function executeTool(
       return memorySearch(input.query);
     case "memory_save":
       return memorySave(input.type, input.key, input.value);
+    case "procedure_search":
+      return procedureSearch(input.query);
+    case "procedure_save":
+      return procedureSave(input.trigger, input.pattern);
     default:
       return `[erro]: ferramenta desconhecida "${name}"`;
   }

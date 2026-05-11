@@ -8,9 +8,10 @@ import { Banner } from "./components/Banner.js";
 import { Messages } from "./components/Messages.js";
 import { ThinkingIndicator } from "./components/Thinking.js";
 import { InputArea } from "./components/InputArea.js";
+import { config } from "../config.js";
 
-const GATEWAY = "ws://127.0.0.1:18790";
-const MODEL   = "claude-opus-4-7";
+const GATEWAY = `ws://127.0.0.1:${config.gateway.port}`;
+const MODEL   = config.agent.model;
 
 const DEFAULT_SNAP: TokenSnapshot = {
   contextUsed: 0, contextLimit: 200_000, contextPct: 0,
@@ -55,7 +56,7 @@ export default function App() {
       setMessages([{
         id: ++msgId.current,
         role: "assistant",
-        content: "Olá, Renzo. O que vamos fazer hoje?",
+        content: `Olá, ${config.user.name}. O que vamos fazer hoje?`,
       }]);
     });
     socket.on("close", () => setConnected(false));
