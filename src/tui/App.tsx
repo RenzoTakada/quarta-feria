@@ -8,9 +8,11 @@ import { Banner } from "./components/Banner.js";
 import { Messages } from "./components/Messages.js";
 import { ThinkingIndicator } from "./components/Thinking.js";
 import { InputArea } from "./components/InputArea.js";
+import { Suggestions } from "./components/Suggestions.js";
 import { config } from "../config.js";
 import { EFFORT_MODEL } from "../agent/core.js";
 import { handleCommand } from "./commands.js";
+import { getSuggestions, completionValue } from "./completions.js";
 
 const GATEWAY = `ws://127.0.0.1:${config.gateway.port}`;
 
@@ -61,6 +63,7 @@ export default function App() {
   const [tokenSnap, setTokenSnap]       = useState<TokenSnapshot>(DEFAULT_SNAP);
   const [queueLen, setQueueLen]         = useState(0);
   const [effort, setEffort]             = useState<"low" | "medium" | "high">(config.agent.effort as "low" | "medium" | "high");
+  const [selectedIdx, setSelectedIdx]   = useState(0);
 
   const ws             = useRef<WebSocket | null>(null);
   const msgId          = useRef(0);
@@ -72,6 +75,9 @@ export default function App() {
 
   // Mantém busyRef sincronizado com busy para acesso em closures
   useEffect(() => { busyRef.current = busy; }, [busy]);
+
+  // Reset seleção ao mudar o input
+  useEffect(() => { setSelectedIdx(0); }, [input]);
 
   const doReset = useCallback(() => {
     resetBusyState(setThinking, setThinkingDone, setStreaming, setOutputChars, setBusy, streamRef, thinkingEndRef);
@@ -218,6 +224,29 @@ export default function App() {
   useInput((char, key) => {
     if (key.ctrl && char === "c") { exit(); return; }
 
+    const suggestions = getSuggestions(input);
+
+    if (key.upArrow) {
+      if (suggestions.length > 0)
+        setSelectedIdx((i) => (i > 0 ? i - 1 : suggestions.length - 1));
+      return;
+    }
+    if (key.downArrow) {
+      if (suggestions.length > 0)
+        setSelectedIdx((i) => (i < suggestions.length - 1 ? i + 1 : 0));
+      return;
+    }
+    if (key.tab) {
+      if (suggestions.length > 0) {
+        setInput(completionValue(suggestions[selectedIdx]));
+      }
+      return;
+    }
+    if (key.escape) {
+      setInput("");
+      return;
+    }
+
     if (key.return) {
       if (!input.trim()) return;
       if (busyRef.current) {
@@ -237,9 +266,10 @@ export default function App() {
   });
 
   // Calcula quantas mensagens cabem na tela
-  const rows      = stdout.rows || 24;
-  const fixedRows = 3 + (thinking ? 1 : 0); // statusbar + inputarea + thinking
-  const msgSlots  = Math.max(1, Math.floor((rows - fixedRows) / 3));
+  const rows        = stdout.rows || 24;
+  const suggestions = getSuggestions(input);
+  const fixedRows   = 3 + (thinking ? 1 : 0) + suggestions.length;
+  const msgSlots    = Math.max(1, Math.floor((rows - fixedRows) / 3));
 
   const displayMsgs: ChatMessage[] = streaming
     ? [...messages, { id: -1, role: "assistant", content: streaming }]
@@ -262,6 +292,7 @@ export default function App() {
           outputChars={outputChars}
         />
       )}
+      <Suggestions suggestions={suggestions} selectedIdx={selectedIdx} />
       <InputArea value={input} busy={busy} queueLen={queueLen} />
     </Box>
   );
