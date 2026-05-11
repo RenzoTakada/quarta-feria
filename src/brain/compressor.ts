@@ -80,31 +80,42 @@ export async function compressSession(
   const transcript = buildTranscript(history);
   if (!transcript.trim()) return;
 
-  const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 400,
-    messages: [
-      {
-        role: "user",
-        content: `Resuma essa conversa em 2-3 frases curtas em português, focando no que foi feito e decidido. Liste até 5 tópicos-chave.
+  // Fallback: se a API falhar (ex: limite atingido), salva transcript bruto
+  const fallbackSave = async (reason: string) => {
+    const firstLine = transcript.split("\n").find((l) => l.trim()) ?? "Sessão sem resumo";
+    await saveEpisode(firstLine.slice(0, 200), [], transcript, startedAt);
+    process.stderr.write(`[gateway] sessão salva (fallback: ${reason})\n`);
+  };
+
+  let raw = "";
+  try {
+    const response = await client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 400,
+      messages: [
+        {
+          role: "user",
+          content: `Resuma essa conversa em 2-3 frases curtas em português, focando no que foi feito e decidido. Liste até 5 tópicos-chave.
 
 Responda SOMENTE com JSON válido nesse formato:
 {"summary": "...", "topics": ["...", "..."]}
 
 Conversa:
 ${transcript.slice(0, 6000)}`,
-      },
-    ],
-  });
-
-  const raw = response.content[0].type === "text" ? response.content[0].text.trim() : "";
+        },
+      ],
+    });
+    raw = response.content[0].type === "text" ? response.content[0].text.trim() : "";
+  } catch (err) {
+    await fallbackSave((err as Error).message.slice(0, 60));
+    return;
+  }
 
   try {
     const parsed = JSON.parse(raw) as { summary: string; topics: string[] };
     await saveEpisode(parsed.summary, parsed.topics, transcript, startedAt);
     process.stderr.write(`[gateway] sessão salva — ${parsed.summary.slice(0, 60)}…\n`);
   } catch {
-    await saveEpisode(raw.slice(0, 300), [], transcript, startedAt);
-    process.stderr.write(`[gateway] sessão salva (fallback)\n`);
+    await fallbackSave("JSON parse failed");
   }
 }
